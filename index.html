@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Who Made That Up?</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #111022; color: #f7f5ff;
+    font-family: system-ui, sans-serif;
+  }
+  main { max-width: 620px; margin: auto; padding: 24px 18px 60px; }
+  h1 { font-size: 2rem; line-height: 1.1; }
+  h2 { line-height: 1.3; }
+  p { line-height: 1.6; }
+  .muted { color: #bab5d2; }
+  .card {
+    background: #211e38; border: 1px solid #393252;
+    border-radius: 18px; padding: 22px; margin-top: 18px;
+  }
+  button, input, textarea {
+    font: inherit; width: 100%; border-radius: 12px;
+    padding: 15px; margin-top: 12px;
+  }
+  input, textarea {
+    background: #151326; color: white; border: 1px solid #655b87;
+  }
+  textarea { min-height: 110px; resize: vertical; }
+  button {
+    background: #c4a3ff; color: #171026;
+    border: none; font-weight: 750; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.08); }
+  button.secondary { background: #393252; color: white; }
+  .answer { text-align: left; background: #393252; color: white; }
+  .badge { color: #cfb6ff; font-weight: 700; }
+  .error { color: #ffb7bd; }
+  .result { border-top: 1px solid #49405e; padding: 14px 0; }
+  .score {
+    display: flex; justify-content: space-between;
+    gap: 12px; padding: 12px 0; border-bottom: 1px solid #49405e;
+  }
+</style>
+</head>
+<body>
+<main>
+  <p class="badge">PASS THE PHONE · PARTY GAME</p>
+  <h1>Who Made That Up?</h1>
+  <div id="app"></div>
+</main>
+
+<script>
+const app = document.getElementById("app");
+
+const prompts = [
+  {
+    question: "What's a terrible name for a dating app?",
+    house: "Last Available Option."
+  },
+  {
+    question: "What's a suspicious thing to put on a résumé?",
+    house: "Usually found innocent."
+  },
+  {
+    question: "What's the worst thing to hear your pilot say?",
+    house: "Does anyone recognize this airport?"
+  },
+  {
+    question: "What should never be a subscription service?",
+    house: "Your front-door key."
+  },
+  {
+    question: "What's the worst feature to add to a smart fridge?",
+    house: "It tells your mother what you ate."
+  }
+];
+
+let players = [];
+let deck = [];
+let round = 0;
+let turn = 0;
+let submissions = [];
+let choices = [];
+let votes = [];
+let awards = [];
+
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;",
+    '"': "&quot;", "'": "&#39;"
+  }[char]));
+}
+
+function shuffle(items) {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+function screen(html) {
+  app.innerHTML = html;
+  window.scrollTo(0, 0);
+}
+
+function roundLabel() {
+  return `<p class="badge">ROUND ${round + 1} OF ${deck.length}</p>`;
+}
+
+function showSetup() {
+  screen(`
+    <section class="card">
+      <h2>Fool your friends.</h2>
+      <p>Write a funny answer. Then guess which answer was secretly
+      added by the game.</p>
+      <p>Earn 1 point for each person you fool and 2 points for
+      spotting the house answer. You cannot vote for your own.</p>
+      <label for="names">Enter 3–8 player names, one per line.</label>
+      <textarea id="names" placeholder="Alex&#10;Jordan&#10;Sam"></textarea>
+      <p id="error" class="error" role="alert"></p>
+      <button id="start">Start game</button>
+      <p class="muted">Use short, distinct names. This prototype keeps
+      the game in this tab only—refreshing resets it.</p>
+    </section>
+  `);
+
+  document.getElementById("start").onclick = () => {
+    const names = document.getElementById("names").value
+      .split("\n").map(name => name.trim()).filter(Boolean);
+    const unique = new Set(names.map(name => name.toLowerCase()));
+
+    if (names.length < 3 || names.length > 8) {
+      document.getElementById("error").textContent =
+        "Please enter between 3 and 8 names.";
+      return;
+    }
+    if (unique.size !== names.length) {
+      document.getElementById("error").textContent =
+        "Please give each player a different name.";
+      return;
+    }
+    if (names.some(name => name.length > 24)) {
+      document.getElementById("error").textContent =
+        "Keep each name to 24 characters or fewer.";
+      return;
+    }
+
+    players = names.map(name => ({ name, score: 0 }));
+    deck = shuffle(prompts);
+    round = 0;
+    beginRound();
+  };
+}
+
+function handoff(playerIndex, task, next) {
+  screen(`
+    ${roundLabel()}
+    <section class="card">
+      <h2>Pass the phone to ${escapeHTML(players[playerIndex].name)}</h2>
+      <p>Everyone else, look away.</p>
+      <button id="ready">I'm ${escapeHTML(players[playerIndex].name)} — ${task}</button>
+    </section>
+  `);
+  document.getElementById("ready").onclick = next;
+}
+
+function beginRound() {
+  turn = 0;
+  submissions = [];
+  choices = [];
+  votes = [];
+  handoff(turn, "write my answer", showAnswerEntry);
+}
+
+function showAnswerEntry() {
+  screen(`
+    ${roundLabel()}
+    <section class="card">
+      <p class="muted">${escapeHTML(players[turn].name)}'s turn</p>
+      <h2>${escapeHTML(deck[round].question)}</h2>
+      <label for="answer">Write one short, funny answer.</label>
+      <textarea id="answer" maxlength="140"
+        placeholder="Your answer…"></textarea>
+      <p id="error" class="error" role="alert"></p>
+      <button id="submit">Lock answer & hide screen</button>
+    </section>
+  `);
+
+  document.getElementById("submit").onclick = () => {
+    const text = document.getElementById("answer").value.trim();
+    if (!text) {
+      document.getElementById("error").textContent =
+        "Write an answer before continuing.";
+      return;
+    }
+
+    const normalize = value =>
+      value.toLowerCase().replace(/[^a-z0-9]/g, "");
+
+    const existing = [
+      deck[round].house,
+      ...submissions.map(answer => answer.text)
+    ];
+
+    if (existing.some(answer => normalize(answer) === normalize(text))) {
+      document.getElementById("error").textContent =
+        "That answer overlaps another answer. Try a different one.";
+      return;
+    }
+
+    submissions.push({ text, owner: turn });
+    turn++;
+
+    if (turn < players.length) {
+      handoff(turn, "write my answer", showAnswerEntry);
+    } else {
+      choices = shuffle([
+        ...submissions,
+        { text: deck[round].house, owner: -1 }
+      ]);
+      turn = 0;
+      handoff(turn, "cast my vote", showVoting);
+    }
+  };
+}
+
+function showVoting() {
+  screen(`
+    ${roundLabel()}
+    <section class="card">
+      <p class="muted">${escapeHTML(players[turn].name)}'s vote</p>
+      <h2>${escapeHTML(deck[round].question)}</h2>
+      <p>Which answer came from the house?
+      Your own answer is hidden from your choices.</p>
+      ${choices.map((answer, index) =>
+        answer.owner === turn ? "" : `
+          <button class="answer" data-choice="${index}">
+            ${escapeHTML(answer.text)}
+          </button>
+        `
+      ).join("")}
+    </section>
+  `);
+
+  document.querySelectorAll("[data-choice]").forEach(button => {
+    button.onclick = () => {
+      votes.push(Number(button.dataset.choice));
+      turn++;
+      if (turn < players.length) {
+        handoff(turn, "cast my vote", showVoting);
+      } else {
+        scoreRound();
+        showReveal();
+      }
+    };
+  });
+}
+
+function scoreRound() {
+  awards = players.map(() => 0);
+  votes.forEach((choiceIndex, voterIndex) => {
+    const owner = choices[choiceIndex].owner;
+    if (owner === -1) awards[voterIndex] += 2;
+    else awards[owner] += 1;
+  });
+  players.forEach((player, index) => {
+    player.score += awards[index];
+  });
+}
+
+function leaderboard(showRoundPoints) {
+  return players.map((player, index) => ({ ...player, index }))
+    .sort((a, b) => b.score - a.score)
+    .map(player => `
+      <div class="score">
+        <span>${escapeHTML(player.name)}</span>
+        <span>${player.score} pts
+        ${showRoundPoints ? `(+${awards[player.index]})` : ""}</span>
+      </div>
+    `).join("");
+}
+
+function showReveal() {
+  screen(`
+    ${roundLabel()}
+    <section class="card">
+      <h2>The reveal</h2>
+      <p>${escapeHTML(deck[round].question)}</p>
+      ${choices.map((answer, index) => {
+        const fooled = votes.reduce((names, vote, voter) => {
+          if (vote === index) names.push(players[voter].name);
+          return names;
+        }, []);
+        return `
+          <div class="result">
+            <p>${escapeHTML(answer.text)}</p>
+            <p class="badge">${answer.owner === -1
+              ? "HOUSE ANSWER"
+              : escapeHTML(players[answer.owner].name) + "'s answer"}</p>
+            <p class="muted">Voted for by:
+              ${fooled.length ? fooled.map(escapeHTML).join(", ") : "Nobody"}
+            </p>
+          </div>
+        `;
+      }).join("")}
+      <h2>Scores</h2>
+      ${leaderboard(true)}
+      <button id="next">
+        ${round + 1 < deck.length ? "Next round" : "See final results"}
+      </button>
+    </section>
+  `);
+
+  document.getElementById("next").onclick = () => {
+    round++;
+    if (round < deck.length) beginRound();
+    else showFinal();
+  };
+}
+
+function showFinal() {
+  const highest = Math.max(...players.map(player => player.score));
+  const winners = players.filter(player => player.score === highest);
+  screen(`
+    <section class="card">
+      <h2>${winners.length > 1 ? "It's a tie!" : "We have a winner!"}</h2>
+      <p>${winners.map(player => escapeHTML(player.name)).join(" & ")}</p>
+      ${leaderboard(false)}
+      <p class="muted">This test pack has only five prompts.
+      Returning players may remember the house answers.</p>
+      <button id="restart">Back to player setup</button>
+    </section>
+  `);
+  document.getElementById("restart").onclick = showSetup;
+}
+
+showSetup();
+</script>
+</body>
+</html>
