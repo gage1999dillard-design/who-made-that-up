@@ -53,27 +53,66 @@
 <script>
 const app = document.getElementById("app");
 
-const prompts = [
+\const prompts = [
   {
-    question: "What's a terrible name for a dating app?",
-    house: "Last Available Option."
+    question: "What's the worst possible answer to 'Why should we hire you?'",
+    house: "Your security seems pretty relaxed."
   },
   {
-    question: "What's a suspicious thing to put on a résumé?",
-    house: "Usually found innocent."
+    question: "What's a red flag in someone's dating profile?",
+    house: "References available from my previous relationships."
   },
   {
-    question: "What's the worst thing to hear your pilot say?",
-    house: "Does anyone recognize this airport?"
+    question: "What's the worst thing to say when meeting your partner's parents?",
+    house: "You look different in the background of our arguments."
   },
   {
-    question: "What should never be a subscription service?",
-    house: "Your front-door key."
+    question: "What's a terrible slogan for a used-car dealership?",
+    house: "Every warning light tells a story."
   },
   {
-    question: "What's the worst feature to add to a smart fridge?",
-    house: "It tells your mother what you ate."
-  }
+    question: "What's the most suspicious item to bring to a job interview?",
+    house: "A framed picture of the person you're replacing."
+  },
+  {
+    question: "What should never be included in a wedding speech?",
+    house: "A ranking of the groom's previous relationships."
+  },
+  {
+    question: "What's the worst excuse for being late to work?",
+    house: "I wanted to see if you'd notice."
+  },
+  {
+    question: "What's a terrible name for a couples counseling business?",
+    house: "We Told You So."
+  },
+  {
+    question: "What's the worst notification to get from your smart doorbell?",
+    house: "Your landlord has entered spectator mode."
+  },
+  {
+    question: "What's something you should never hear from your barber?",
+    house: "Let's agree you moved."
+  },
+  {
+    question: "What's a terrible thing to put on a business card?",
+    house: "Please don't call my previous number."
+  },
+  {
+    question: "What's the worst opening message on a dating app?",
+    house: "My mom thinks we should give this a chance."
+  },
+  {
+    question: "What's a suspicious rule for an Airbnb host to leave?",
+    house: "If someone knocks, your name is Kevin."
+  },
+  {
+    question: "What's the worst thing to hear your tattoo artist say?",
+    house: "How attached are you to the spelling?"
+  },
+  {
+    question: "What's a terrible answer to 'Where do you see yourself in five years?'",
+    house: "Ideally, outside the documentary."  }
 ];
 
 let players = [];
@@ -149,8 +188,8 @@ function showSetup() {
     }
 
     players = names.map(name => ({ name, score: 0 }));
-    deck = shuffle(prompts);
-    round = 0;
+    deck = shuffle(prompts).slice(0, 5);
+   round = 0;
     beginRound();
   };
 }
