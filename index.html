@@ -53,6 +53,26 @@
 <script>
 const app = document.getElementById("app");
 
+const ANSWER_LIMIT = 140;
+
+function normalizeAnswer(value) {
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+function buildChoices() {
+  const grouped = new Map();
+  for (const answer of [...submissions, { text: deck[round].house, owner: -1 }]) {
+    const key = normalizeAnswer(answer.text);
+    if (!grouped.has(key)) grouped.set(key, { text: answer.text, owners: [], house: false });
+    const choice = grouped.get(key);
+    if (answer.owner === -1) {
+      choice.house = true;
+      choice.text = answer.text;
+    } else choice.owners.push(answer.owner);
+  }
+  return shuffle([...grouped.values()]);
+}
+
 const prompts = [
   {
     question: "What's a terrible name for a dating app?",
@@ -117,7 +137,9 @@ function showSetup() {
       <p>Write a funny answer. Then guess which answer was secretly
       added by the game.</p>
       <p>Earn 1 point for each person you fool and 2 points for
-      spotting the house answer. You cannot vote for your own.</p>
+      spotting the house answer. Matching answers share one choice;
+      each author earns a point per person fooled. You cannot vote for
+      your own answer. Match the house yourself and earn 2 points at the reveal.</p>
       <label for="names">Enter 3–8 player names, one per line.</label>
       <textarea id="names" placeholder="Alex&#10;Jordan&#10;Sam"></textarea>
       <p id="error" class="error" role="alert"></p>
@@ -181,8 +203,8 @@ function showAnswerEntry() {
     <section class="card">
       <p class="muted">${escapeHTML(players[turn].name)}'s turn</p>
       <h2>${escapeHTML(deck[round].question)}</h2>
-      <label for="answer">Write one short, funny answer.</label>
-      <textarea id="answer" maxlength="140"
+      <label for="answer">Write one short, funny answer (${ANSWER_LIMIT} characters maximum).</label>
+      <textarea id="answer" maxlength="${ANSWER_LIMIT}"
         placeholder="Your answer…"></textarea>
       <p id="error" class="error" role="alert"></p>
       <button id="submit">Lock answer & hide screen</button>
@@ -197,17 +219,14 @@ function showAnswerEntry() {
       return;
     }
 
-    const normalize = value =>
-      value.toLowerCase().replace(/[^a-z0-9]/g, "");
-
-    const existing = [
-      deck[round].house,
-      ...submissions.map(answer => answer.text)
-    ];
-
-    if (existing.some(answer => normalize(answer) === normalize(text))) {
+    if (text.length > ANSWER_LIMIT) {
       document.getElementById("error").textContent =
-        "That answer overlaps another answer. Try a different one.";
+        `Keep your answer to ${ANSWER_LIMIT} characters or fewer.`;
+      return;
+    }
+    if (!normalizeAnswer(text)) {
+      document.getElementById("error").textContent =
+        "Include at least one letter or number in your answer.";
       return;
     }
 
@@ -217,10 +236,7 @@ function showAnswerEntry() {
     if (turn < players.length) {
       handoff(turn, "write my answer", showAnswerEntry);
     } else {
-      choices = shuffle([
-        ...submissions,
-        { text: deck[round].house, owner: -1 }
-      ]);
+      choices = buildChoices();
       turn = 0;
       handoff(turn, "cast my vote", showVoting);
     }
@@ -236,7 +252,7 @@ function showVoting() {
       <p>Which answer came from the house?
       Your own answer is hidden from your choices.</p>
       ${choices.map((answer, index) =>
-        answer.owner === turn ? "" : `
+        answer.owners.includes(turn) ? "" : `
           <button class="answer" data-choice="${index}">
             ${escapeHTML(answer.text)}
           </button>
@@ -261,10 +277,17 @@ function showVoting() {
 
 function scoreRound() {
   awards = players.map(() => 0);
+  const houseChoice = choices.find(answer => answer.house);
+  houseChoice.owners.forEach(owner => { awards[owner] += 2; });
   votes.forEach((choiceIndex, voterIndex) => {
-    const owner = choices[choiceIndex].owner;
-    if (owner === -1) awards[voterIndex] += 2;
-    else awards[owner] += 1;
+    const answer = choices[choiceIndex];
+    if (answer.house) {
+      if (!houseChoice.owners.includes(voterIndex)) awards[voterIndex] += 2;
+    } else {
+      answer.owners.forEach(owner => {
+        if (owner !== voterIndex) awards[owner] += 1;
+      });
+    }
   });
   players.forEach((player, index) => {
     player.score += awards[index];
@@ -297,9 +320,11 @@ function showReveal() {
         return `
           <div class="result">
             <p>${escapeHTML(answer.text)}</p>
-            <p class="badge">${answer.owner === -1
-              ? "HOUSE ANSWER"
-              : escapeHTML(players[answer.owner].name) + "'s answer"}</p>
+            <p class="badge">${answer.house
+              ? "HOUSE ANSWER" + (answer.owners.length
+                ? " — matched by " + answer.owners.map(owner => escapeHTML(players[owner].name)).join(", ") + " (+2 each)"
+                : "")
+              : answer.owners.map(owner => escapeHTML(players[owner].name)).join(", ") + "'s answer"}</p>
             <p class="muted">Voted for by:
               ${fooled.length ? fooled.map(escapeHTML).join(", ") : "Nobody"}
             </p>
