@@ -75,24 +75,144 @@ function buildChoices() {
 
 const prompts = [
   {
-    question: "What's a terrible name for a dating app?",
-    house: "Last Available Option."
+    "question": "What's a terrible name for a dating app?",
+    "house": "Last Available Option."
   },
   {
-    question: "What's a suspicious thing to put on a résumé?",
-    house: "Usually found innocent."
+    "question": "What's a suspicious thing to put on a résumé?",
+    "house": "Usually found innocent."
   },
   {
-    question: "What's the worst thing to hear your pilot say?",
-    house: "Does anyone recognize this airport?"
+    "question": "What's the worst thing to hear your pilot say?",
+    "house": "Does anyone recognize this airport?"
   },
   {
-    question: "What should never be a subscription service?",
-    house: "Your front-door key."
+    "question": "What should never be a subscription service?",
+    "house": "Your front-door key."
   },
   {
-    question: "What's the worst feature to add to a smart fridge?",
-    house: "It tells your mother what you ate."
+    "question": "What's the worst feature to add to a smart fridge?",
+    "house": "It tells your mother what you ate."
+  },
+  {
+    "question": "What's the worst slogan for a moving company?",
+    "house": "We lose boxes so you don't have to."
+  },
+  {
+    "question": "What's a terrible surprise to find in a fortune cookie?",
+    "house": "Your subscription to good luck has expired."
+  },
+  {
+    "question": "What's the worst thing a dentist could say halfway through?",
+    "house": "This looked easier in the video."
+  },
+  {
+    "question": "What would a raccoon put on its business card?",
+    "house": "Independent lid removal specialist."
+  },
+  {
+    "question": "What's a terrible name for a luxury hotel?",
+    "house": "The Last Resort."
+  },
+  {
+    "question": "What should your fitness watch never tell you?",
+    "house": "I counted that walk to the fridge as a vacation."
+  },
+  {
+    "question": "What's the worst excuse for being late to your own wedding?",
+    "house": "I wanted to see who else showed up."
+  },
+  {
+    "question": "What would a dog write in a review of its owner?",
+    "house": "Good roommate. Weirdly attached to the ball."
+  },
+  {
+    "question": "What's the worst thing to hear from your GPS?",
+    "house": "Follow that guy. He looks confident."
+  },
+  {
+    "question": "What's a suspicious rule for a restaurant?",
+    "house": "Please don't interview the chef."
+  },
+  {
+    "question": "What's the worst prize in a company raffle?",
+    "house": "An extra shift."
+  },
+  {
+    "question": "What would a haunted house put in its rental listing?",
+    "house": "Previous tenants remain very involved."
+  },
+  {
+    "question": "What's a terrible feature for a dating app?",
+    "house": "Your ex writes your profile."
+  },
+  {
+    "question": "What's the worst thing to say during a job interview?",
+    "house": "How strict is the whole showing up thing?"
+  },
+  {
+    "question": "What would a cat put on its résumé?",
+    "house": "Managed a household with no financial contribution."
+  },
+  {
+    "question": "What's the worst announcement at a family reunion?",
+    "house": "We will now read the group chat aloud."
+  },
+  {
+    "question": "What should never come with a surprise fee?",
+    "house": "The exit door."
+  },
+  {
+    "question": "What's a terrible name for a babysitting service?",
+    "house": "Probably Still Here."
+  },
+  {
+    "question": "What's the worst thing a mechanic could put on your receipt?",
+    "house": "Noise relocated successfully."
+  },
+  {
+    "question": "What would aliens find most confusing about humans?",
+    "house": "We pay to run indoors without going anywhere."
+  },
+  {
+    "question": "What's a terrible motivational poster for an office?",
+    "house": "Someone has to be the example in the training video."
+  },
+  {
+    "question": "What's the worst feature for a smart toilet?",
+    "house": "A public leaderboard."
+  },
+  {
+    "question": "What's an unusual reason to get banned from a grocery store?",
+    "house": "Leaving reviews on individual grapes."
+  },
+  {
+    "question": "What's the worst thing to hear from your barber?",
+    "house": "Let's call it a fresh start."
+  },
+  {
+    "question": "What would a mosquito say in a dating profile?",
+    "house": "Looking for my type. Preferably O positive."
+  },
+  {
+    "question": "What's a terrible slogan for an airline?",
+    "house": "Your luggage deserves its own adventure."
+  },
+  {
+    "question": "What should a robot never learn from humans?",
+    "house": "How to reply all."
+  },
+  {
+    "question": "What's the worst theme for a surprise party?",
+    "house": "People who have a complaint about you."
+  },
+  {
+    "question": "What's a terrible thing to put in an out-of-office reply?",
+    "house": "Ask someone who cares."
+  },
+  {
+    "question": "What would your couch say if it could talk?",
+    "house": "I know where your money went."
   }
 ];
 
@@ -171,7 +291,7 @@ function showSetup() {
     }
 
     players = names.map(name => ({ name, score: 0 }));
-    deck = shuffle(prompts);
+    deck = shuffle(prompts).slice(0, 5);
     round = 0;
     beginRound();
   };
@@ -354,7 +474,7 @@ function showFinal() {
       <h2>${winners.length > 1 ? "It's a tie!" : "We have a winner!"}</h2>
       <p>${winners.map(player => escapeHTML(player.name)).join(" & ")}</p>
       ${leaderboard(false)}
-      <p class="muted">This test pack has only five prompts.
+      <p class="muted">This pack has ${prompts.length} prompts, with five randomly selected per game.
       Returning players may remember the house answers.</p>
       <button id="restart">Back to player setup</button>
     </section>
