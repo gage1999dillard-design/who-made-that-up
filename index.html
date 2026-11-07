@@ -19,11 +19,11 @@
     background: #211e38; border: 1px solid #393252;
     border-radius: 18px; padding: 22px; margin-top: 18px;
   }
-  button, input, textarea {
+  button, input, textarea, select {
     font: inherit; width: 100%; border-radius: 12px;
     padding: 15px; margin-top: 12px;
   }
-  input, textarea {
+  input, textarea, select {
     background: #151326; color: white; border: 1px solid #655b87;
   }
   textarea { min-height: 110px; resize: vertical; }
@@ -224,6 +224,13 @@ let submissions = [];
 let choices = [];
 let votes = [];
 let awards = [];
+let celebrationTimer = null;
+let partyExtras = {};
+
+function resetPartyExtras() {
+  partyExtras = { favorite: null, nickname: null, gag: null };
+}
+resetPartyExtras();
 
 function escapeHTML(value) {
   return String(value).replace(/[&<>"']/g, char => ({
@@ -242,6 +249,7 @@ function shuffle(items) {
 }
 
 function screen(html) {
+  clearInterval(celebrationTimer);
   app.innerHTML = html;
   window.scrollTo(0, 0);
 }
@@ -291,6 +299,7 @@ function showSetup() {
       return;
     }
 
+    resetPartyExtras();
     players = names.map(name => ({ name, score: 0, correctGuesses: 0, fooled: 0, houseMatches: 0, biggestBluff: 0 }));
     deck = shuffle(prompts).slice(0, 5);
     round = 0;
@@ -511,9 +520,126 @@ function titleCards() {
   `).join("") || '<p class="muted">No titles earned this game. Try another round!</p>';
 }
 
+
+const partyGags = [
+  "Deliver a 15-second campaign speech explaining why you deserved to win.",
+  "Read an imaginary weather forecast for the mood in this room.",
+  "Give your best dramatic villain laugh.",
+  "Advertise an imaginary product that absolutely nobody needs.",
+  "Accept an imaginary award for spectacularly suspicious answers.",
+  "Speak like a robot until the next game starts, or for one minute."
+];
+
+function partyRewardCards(winners, losers, allTied) {
+  return `
+    <section class="card">
+      <h2>👑 ${winners.length > 1 ? "Shared crown" : "Party royalty"}</h2>
+      <p class="badge">${winners.map(p => escapeHTML(p.name)).join(" & ")}</p>
+      <p>${winners.length > 1 ? "Agree together on" : "You choose"} the next game the group plays. If you stay here, start another five-round game.</p>
+      <button id="rematch">Play again with these players</button>
+      <h3>Victory spotlight</h3>
+      <p>Take the floor for a 15-second victory speech. Co-winners share the spotlight.</p>
+      <p id="speech-status" role="status">Ready for your speech?</p>
+      <button id="speech">Start 15-second spotlight</button>
+      <h3>Nickname authority</h3>
+      <p>Give a willing player a nickname to use aloud during the next game.</p>
+      <label for="nickname-player">Willing player</label>
+      <select id="nickname-player">
+        ${players.map((p,i)=>`<option value="${i}">${escapeHTML(p.name)}</option>`).join("")}
+      </select>
+      <label for="nickname">Nickname (24 characters maximum)</label>
+      <input id="nickname" maxlength="24" placeholder="Captain Questionable">
+      <button id="save-nickname">They agree — award nickname</button>
+      <p id="nickname-status" role="status">${partyExtras.nickname ? escapeHTML(partyExtras.nickname) : ""}</p>
+    </section>
+    <section class="card">
+      <h2>Crowd Favorite</h2>
+      <p>As a group, choose whose answer made you laugh the most. This is a separate award worth bragging rights.</p>
+      <label for="favorite-player">Group's choice</label>
+      <select id="favorite-player">
+        <option value="">Choose a player</option>
+        ${players.map((p,i)=>`<option value="${i}">${escapeHTML(p.name)}</option>`).join("")}
+      </select>
+      <button id="save-favorite">Award Crowd Favorite</button>
+      <p id="favorite-status" role="status">${partyExtras.favorite === null ? "" : escapeHTML(players[partyExtras.favorite].name) + " is the Crowd Favorite!"}</p>
+    </section>
+    <section class="card">
+      <h2>Last-place encore</h2>
+      ${allTied ? "<p>Everyone tied — no last-place gag this time.</p>" : `
+        <p>${losers.map(p=>escapeHTML(p.name)).join(" & ")}: want one last chance to make everyone laugh?</p>
+        <p>Optional, with no score penalty for skipping. Tied players can volunteer together or choose one willing performer.</p>
+        <p id="gag-status" role="status">${escapeHTML(partyExtras.gag || "Draw a silly performance gag, or skip.")}</p>
+        <button id="draw-gag">Draw a gag</button>
+        <button id="skip-gag" class="secondary">Skip the gag</button>
+      `}
+    </section>
+  `;
+}
+
+function bindPartyRewards() {
+  document.getElementById("rematch").onclick = () => {
+    resetPartyExtras();
+    players.forEach(p => {
+      p.score = 0; p.correctGuesses = 0; p.fooled = 0;
+      p.houseMatches = 0; p.biggestBluff = 0;
+    });
+    deck = shuffle(prompts).slice(0, 5);
+    round = 0;
+    beginRound();
+  };
+  document.getElementById("speech").onclick = () => {
+    clearInterval(celebrationTimer);
+    const deadline = Date.now() + 15000;
+    const status = document.getElementById("speech-status");
+    status.textContent = "15 seconds — the floor is yours!";
+    celebrationTimer = setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      status.textContent = remaining ? remaining + " seconds remaining" : "Time! Give your champion a round of applause.";
+      if (!remaining) clearInterval(celebrationTimer);
+    }, 250);
+  };
+  document.getElementById("save-nickname").onclick = () => {
+    const name = document.getElementById("nickname").value.trim();
+    const value = document.getElementById("nickname-player").value;
+    const index = Number(value);
+    const status = document.getElementById("nickname-status");
+    if (!name || name.length > 24 || value === "" || !players[index]) {
+      status.textContent = "Choose a player and enter a nickname of 1–24 characters.";
+      return;
+    }
+    partyExtras.nickname = players[index].name + " will answer to “" + name + "” next game.";
+    status.textContent = partyExtras.nickname;
+  };
+  document.getElementById("save-favorite").onclick = () => {
+    const value = document.getElementById("favorite-player").value;
+    const index = Number(value);
+    const status = document.getElementById("favorite-status");
+    if (value === "" || !players[index]) {
+      status.textContent = "Choose the group's favorite first.";
+      return;
+    }
+    partyExtras.favorite = index;
+    status.textContent = players[index].name + " is the Crowd Favorite!";
+  };
+  const draw = document.getElementById("draw-gag");
+  if (draw) {
+    draw.onclick = () => {
+      const options = partyGags.filter(gag => gag !== partyExtras.gag);
+      partyExtras.gag = options[Math.floor(Math.random() * options.length)];
+      document.getElementById("gag-status").textContent = partyExtras.gag;
+    };
+    document.getElementById("skip-gag").onclick = () => {
+      partyExtras.gag = "Gag skipped. On to the next game!";
+      document.getElementById("gag-status").textContent = partyExtras.gag;
+    };
+  }
+}
+
 function showFinal() {
   const highest = Math.max(...players.map(player => player.score));
   const winners = players.filter(player => player.score === highest);
+  const lowest = Math.min(...players.map(player => player.score));
+  const losers = players.filter(player => player.score === lowest);
   screen(`
     <section class="card">
       <h2>${winners.length > 1 ? "It's a tie!" : "We have a winner!"}</h2>
@@ -526,7 +652,9 @@ function showFinal() {
       Returning players may remember the house answers.</p>
       <button id="restart">Back to player setup</button>
     </section>
+    ${partyRewardCards(winners, losers, highest === lowest)}
   `);
+  bindPartyRewards();
   document.getElementById("restart").onclick = showSetup;
 }
 
