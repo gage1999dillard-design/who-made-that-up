@@ -260,6 +260,7 @@ function showSetup() {
       spotting the house answer. Matching answers share one choice;
       each author earns a point per person fooled. You cannot vote for
       your own answer. Match the house yourself and earn 2 points at the reveal.</p>
+      <p>Earn end-of-game titles for spotting the house, fooling friends, matching the house, and landing the biggest bluff.</p>
       <label for="names">Enter 3–8 player names, one per line.</label>
       <textarea id="names" placeholder="Alex&#10;Jordan&#10;Sam"></textarea>
       <p id="error" class="error" role="alert"></p>
@@ -290,7 +291,7 @@ function showSetup() {
       return;
     }
 
-    players = names.map(name => ({ name, score: 0 }));
+    players = names.map(name => ({ name, score: 0, correctGuesses: 0, fooled: 0, houseMatches: 0, biggestBluff: 0 }));
     deck = shuffle(prompts).slice(0, 5);
     round = 0;
     beginRound();
@@ -398,19 +399,31 @@ function showVoting() {
 function scoreRound() {
   awards = players.map(() => 0);
   const houseChoice = choices.find(answer => answer.house);
-  houseChoice.owners.forEach(owner => { awards[owner] += 2; });
+  houseChoice.owners.forEach(owner => {
+    awards[owner] += 2;
+    players[owner].houseMatches++;
+  });
+  const roundFooled = players.map(() => 0);
   votes.forEach((choiceIndex, voterIndex) => {
     const answer = choices[choiceIndex];
     if (answer.house) {
-      if (!houseChoice.owners.includes(voterIndex)) awards[voterIndex] += 2;
+      if (!houseChoice.owners.includes(voterIndex)) {
+        awards[voterIndex] += 2;
+        players[voterIndex].correctGuesses++;
+      }
     } else {
       answer.owners.forEach(owner => {
-        if (owner !== voterIndex) awards[owner] += 1;
+        if (owner !== voterIndex) {
+          awards[owner] += 1;
+          players[owner].fooled++;
+          roundFooled[owner]++;
+        }
       });
     }
   });
   players.forEach((player, index) => {
     player.score += awards[index];
+    player.biggestBluff = Math.max(player.biggestBluff, roundFooled[index]);
   });
 }
 
@@ -466,6 +479,38 @@ function showReveal() {
   };
 }
 
+
+function gameTitles() {
+  const titles = [];
+  function award(title, field, description) {
+    const best = Math.max(...players.map(player => player[field]));
+    if (best === 0) return;
+    titles.push({
+      title, description: description(best),
+      names: players.filter(player => player[field] === best).map(player => player.name)
+    });
+  }
+  award("House Whisperer", "correctGuesses",
+    count => count + " correct house guesses");
+  award("Silver Tongue", "fooled",
+    count => count + " votes fooled across the game");
+  award("Sneaky Mirror", "houseMatches",
+    count => count + " answers matched the house");
+  award("Chaos Goblin", "biggestBluff",
+    count => count + " players fooled in a single round");
+  return titles;
+}
+
+function titleCards() {
+  return gameTitles().map(award => `
+    <div class="result">
+      <p class="badge">${escapeHTML(award.title)}</p>
+      <p>${award.names.map(escapeHTML).join(" & ")}</p>
+      <p class="muted">${escapeHTML(award.description)}</p>
+    </div>
+  `).join("") || '<p class="muted">No titles earned this game. Try another round!</p>';
+}
+
 function showFinal() {
   const highest = Math.max(...players.map(player => player.score));
   const winners = players.filter(player => player.score === highest);
@@ -474,6 +519,9 @@ function showFinal() {
       <h2>${winners.length > 1 ? "It's a tie!" : "We have a winner!"}</h2>
       <p>${winners.map(player => escapeHTML(player.name)).join(" & ")}</p>
       ${leaderboard(false)}
+      <h2>Earned titles</h2>
+      <p class="muted">Titles celebrate this game. Tied players share a title. Save a screenshot for bragging rights.</p>
+      ${titleCards()}
       <p class="muted">This pack has ${prompts.length} prompts, with five randomly selected per game.
       Returning players may remember the house answers.</p>
       <button id="restart">Back to player setup</button>
