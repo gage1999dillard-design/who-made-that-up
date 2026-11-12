@@ -56,7 +56,9 @@ const app = document.getElementById("app");
 const ANSWER_LIMIT = 140;
 
 function normalizeAnswer(value) {
-  return value.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  return value.normalize("NFC").toLowerCase()
+    .replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+    .trim().replace(/\s+/gu, " ").replace(/[.!?…]+$/u, "").trim();
 }
 
 function buildChoices() {
@@ -226,11 +228,24 @@ let votes = [];
 let awards = [];
 let celebrationTimer = null;
 let partyExtras = {};
+let activeNickname = null;
 
 function resetPartyExtras() {
   partyExtras = { favorite: null, nickname: null, gag: null };
 }
 resetPartyExtras();
+
+function playerName(index) {
+  const name = players[index].name;
+  return activeNickname && activeNickname.playerIndex === index
+    ? name + " (“" + activeNickname.text + "”)" : name;
+}
+
+function nicknameMessage() {
+  return partyExtras.nickname
+    ? players[partyExtras.nickname.playerIndex].name + " will answer to “" +
+      partyExtras.nickname.text + "” next game." : "";
+}
 
 function escapeHTML(value) {
   return String(value).replace(/[&<>"']/g, char => ({
@@ -267,7 +282,8 @@ function showSetup() {
       <p>Earn 1 point for each person you fool and 2 points for
       spotting the house answer. Matching answers share one choice;
       each author earns a point per person fooled. You cannot vote for
-      your own answer. Match the house yourself and earn 2 points at the reveal.</p>
+      your own answer. Match the house yourself and earn 2 points at the reveal;
+      your voting turn is skipped.</p>
       <p>Earn end-of-game titles for spotting the house, fooling friends, matching the house, and landing the biggest bluff.</p>
       <label for="names">Enter 3–8 player names, one per line.</label>
       <textarea id="names" placeholder="Alex&#10;Jordan&#10;Sam"></textarea>
@@ -300,6 +316,7 @@ function showSetup() {
     }
 
     resetPartyExtras();
+    activeNickname = null;
     players = names.map(name => ({ name, score: 0, correctGuesses: 0, fooled: 0, houseMatches: 0, biggestBluff: 0 }));
     deck = shuffle(prompts).slice(0, 5);
     round = 0;
@@ -311,9 +328,9 @@ function handoff(playerIndex, task, next) {
   screen(`
     ${roundLabel()}
     <section class="card">
-      <h2>Pass the phone to ${escapeHTML(players[playerIndex].name)}</h2>
+      <h2>Pass the phone to ${escapeHTML(playerName(playerIndex))}</h2>
       <p>Everyone else, look away.</p>
-      <button id="ready">I'm ${escapeHTML(players[playerIndex].name)} — ${task}</button>
+      <button id="ready">I'm ${escapeHTML(playerName(playerIndex))} — ${task}</button>
     </section>
   `);
   document.getElementById("ready").onclick = next;
@@ -331,7 +348,7 @@ function showAnswerEntry() {
   screen(`
     ${roundLabel()}
     <section class="card">
-      <p class="muted">${escapeHTML(players[turn].name)}'s turn</p>
+      <p class="muted">${escapeHTML(playerName(turn))}'s turn</p>
       <h2>${escapeHTML(deck[round].question)}</h2>
       <label for="answer">Write one short, funny answer (${ANSWER_LIMIT} characters maximum).</label>
       <textarea id="answer" maxlength="${ANSWER_LIMIT}"
@@ -354,7 +371,7 @@ function showAnswerEntry() {
         `Keep your answer to ${ANSWER_LIMIT} characters or fewer.`;
       return;
     }
-    if (!normalizeAnswer(text)) {
+    if (!/[\p{L}\p{N}]/u.test(text)) {
       document.getElementById("error").textContent =
         "Include at least one letter or number in your answer.";
       return;
@@ -373,11 +390,36 @@ function showAnswerEntry() {
   };
 }
 
+function finishVote(choiceIndex) {
+  votes[turn] = choiceIndex;
+  turn++;
+  if (turn < players.length) {
+    handoff(turn, "cast my vote", showVoting);
+  } else {
+    scoreRound();
+    showReveal();
+  }
+}
+
 function showVoting() {
+  const houseChoice = choices.find(answer => answer.house);
+  if (houseChoice.owners.includes(turn)) {
+    screen(`
+      ${roundLabel()}
+      <section class="card">
+        <p class="muted">${escapeHTML(playerName(turn))}'s turn</p>
+        <h2>Your turn is complete.</h2>
+        <p>Points will be shown at the reveal. Keep this screen private.</p>
+        <button id="continue-vote">Continue & hide screen</button>
+      </section>
+    `);
+    document.getElementById("continue-vote").onclick = () => finishVote(null);
+    return;
+  }
   screen(`
     ${roundLabel()}
     <section class="card">
-      <p class="muted">${escapeHTML(players[turn].name)}'s vote</p>
+      <p class="muted">${escapeHTML(playerName(turn))}'s vote</p>
       <h2>${escapeHTML(deck[round].question)}</h2>
       <p>Which answer came from the house?
       Your own answer is hidden from your choices.</p>
@@ -393,14 +435,7 @@ function showVoting() {
 
   document.querySelectorAll("[data-choice]").forEach(button => {
     button.onclick = () => {
-      votes.push(Number(button.dataset.choice));
-      turn++;
-      if (turn < players.length) {
-        handoff(turn, "cast my vote", showVoting);
-      } else {
-        scoreRound();
-        showReveal();
-      }
+      finishVote(Number(button.dataset.choice));
     };
   });
 }
@@ -414,7 +449,9 @@ function scoreRound() {
   });
   const roundFooled = players.map(() => 0);
   votes.forEach((choiceIndex, voterIndex) => {
+    if (choiceIndex === null || houseChoice.owners.includes(voterIndex)) return;
     const answer = choices[choiceIndex];
+    if (!answer || answer.owners.includes(voterIndex)) return;
     if (answer.house) {
       if (!houseChoice.owners.includes(voterIndex)) {
         awards[voterIndex] += 2;
@@ -441,7 +478,7 @@ function leaderboard(showRoundPoints) {
     .sort((a, b) => b.score - a.score)
     .map(player => `
       <div class="score">
-        <span>${escapeHTML(player.name)}</span>
+        <span>${escapeHTML(playerName(player.index))}</span>
         <span>${player.score} pts
         ${showRoundPoints ? `(+${awards[player.index]})` : ""}</span>
       </div>
@@ -550,7 +587,7 @@ function partyRewardCards(winners, losers, allTied) {
       <label for="nickname">Nickname (24 characters maximum)</label>
       <input id="nickname" maxlength="24" placeholder="Captain Questionable">
       <button id="save-nickname">They agree — award nickname</button>
-      <p id="nickname-status" role="status">${partyExtras.nickname ? escapeHTML(partyExtras.nickname) : ""}</p>
+      <p id="nickname-status" role="status">${escapeHTML(nicknameMessage())}</p>
     </section>
     <section class="card">
       <h2>Crowd Favorite</h2>
@@ -578,6 +615,7 @@ function partyRewardCards(winners, losers, allTied) {
 
 function bindPartyRewards() {
   document.getElementById("rematch").onclick = () => {
+    activeNickname = partyExtras.nickname;
     resetPartyExtras();
     players.forEach(p => {
       p.score = 0; p.correctGuesses = 0; p.fooled = 0;
@@ -607,8 +645,8 @@ function bindPartyRewards() {
       status.textContent = "Choose a player and enter a nickname of 1–24 characters.";
       return;
     }
-    partyExtras.nickname = players[index].name + " will answer to “" + name + "” next game.";
-    status.textContent = partyExtras.nickname;
+    partyExtras.nickname = { playerIndex: index, text: name };
+    status.textContent = nicknameMessage();
   };
   document.getElementById("save-favorite").onclick = () => {
     const value = document.getElementById("favorite-player").value;
